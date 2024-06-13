@@ -1,0 +1,181 @@
+#!/usr/bin/perl
+# tvshow-filename-to-nfo [ timestamp ]
+# Creates Kodi-compatible .nfo files for a folder full of TV shows
+# also creates thumnails for each episode
+# Requires ffmpeg (unless you always use --nothumbnail )
+# Does NOT create fanart.jpg nor poster.jpg for the series as a whole
+
+use Cwd qw();
+
+my ($var1) = @ARGV;
+my $timestamp="00:02:00";
+my $nothumbnail=0;
+my $unknownargument=0;
+my $quiet=0;
+my $force=0;
+my $foundafile=0;
+my $unknownepisode=0;
+my $tvshownfoalreadyexists=0;
+my $path = Cwd::cwd();
+
+foreach my $var (@ARGV) {
+  if ( $var =~ /^(-h|--help)$/ ) { 
+    print "\n";
+    print "tvshow-filename-to-nfo [ OPTIONS ] [ directory ] [ timestamp ]\n";
+    print "\n";
+    print "Creates Kodi-compatible .nfo files for a folder full of TV shows\n";
+    print "\n";
+    print "Folder is named: \"TV Show Name (Year)\"\n";
+    print "Will default to current directory unless directory provided as argument\n";
+    print "\n";
+    print "TV episodes are inside this folder, named: \"SSxEE anything.ext\"\n";
+    print "where SS is season number - can be 1,2,3,4 digits\n";
+    print "NN is episode number - can be 1,2,3 digits\n";
+    print "Leading zeroes are allowed but optional.\n";
+    print "anything can be name of episode or name of series\n";
+    print ".ext is .mp4 .mkv or .avi ; e.g:\n";
+    print "01x01 An Unearthly Child.mkv\n";
+    print "\n";
+    print "Need to convert sXXeXX filenames to SSxEE ? Try rename command:\n";
+    print 'rename -v ("s/^(.*)s(\d+)e(\d+)(.*)$/\$1x\$2 \$3 \$4/i") * -n'."\n";
+    print "(-n does dry run; remove -n to make changes permanent)\n";
+    print "\n";
+    print "timestamp is optional, it is the time from which a thumbnail is taken\n";
+    print "hh:mm:ss where hh=hour, mm=minutues, ss=second\n";
+    print "You can give decimal seconds, e.g. 00:02:30.15\n";
+    print "for two minutes, thirty seconds and fifteen hundredths of a second\n";
+    print "if not supplied it defaults to 2 minutes 00:02:00\n";
+    print "or you can provide -n --nothumbnail\n";
+    print "\n";
+    print "For artwork for whole series, inside folder have literally named files:\n";
+    print "fanart.jpg 1920x1080\n";
+    print "poster.jpg 1000x1500\n";
+    print "\n";
+    print "Options:\n";
+    print "-n --nothumnail Do not create episode thumbnails\n";
+    print "-q --quiet      Do not produce progress information\n";
+    print "-f --force      Overwrite existing .nfo and thumnail files\n";
+    print "                (default is not to overwrite)\n";
+    print "\n";
+    exit;
+  }
+  if ( $var =~ /^(-n|--nothumbnails?)$/ ) {
+    $nothumbnail=-1;
+    if ( not $quiet ) { print "Thumbnails off\n"; }
+    next;
+  }
+  if ( $var =~ /^(-q|--quiet?)$/ ) {
+    $quiet=-1;
+    next;
+  }
+  if ( $var =~ /^(-f|--force)$/ ) {
+    $force=-1;
+    next;
+  }
+  if ( $var =~ /^\d+:\d+:\d+(\.\d+)?$/ ) {
+    $timestamp=$var;
+    if ( not $quiet ) { print "Thumnail timestamp: $timestamp\n"; }
+    next;
+  }
+  if ( -d $var ) {
+    $path = $var;
+    if ( not $quiet ) { print "Directory: '$path'\n"; }
+    next;
+  }
+  print "Unknown argument: \"$var\" (it's not a directory)\n";
+  $unknownargument=-1
+}
+if ( $unknownargument ) {
+  die "\nExited due to unknown arguments; try --help";
+}
+
+chdir($path) or die "Could not change working directory to '$path'";
+my ($folder) = ( $path =~ m/([^\/]+)$/ );
+if ( $folder eq "" ) { $folder=$path; } ;
+if ( not $quiet ) { print "Folder=\"$folder\"\n"; }
+if ( -e 'tvshow.nfo' ) { $tvshownfoalreadyexists=-1; };
+if (  $force or not -e 'tvshow.nfo' ) { 
+  open(output,'>',"tvshow.nfo");
+  print output "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>\n";
+  print output "<tvshow>\n";
+  print output "  <title>$folder</title>\n";
+  print output "  <!-- Do NOT use indentation within plot. Line breaks are treated literally -->\n";
+  print output "  <plot>\n";
+  print output "$folder\n";
+  my $nospacetitle = $folder;
+  $nospacetitle =~ s/[^A-Za-z0-9]+//g;
+  print output "  <uniqueid type=\"home\" default=\"true\">$nospacetitle</uniqueid>\n";
+  my ($year) = ( $path =~ /\((\d\d\d\d)\)$/ );
+  if ( $year eq "" ) { $year=2000 }
+  # Dunno why I find 2000-01-01 more appealing than Kodi default 1969-12-31 but I do
+  print output "  <premiered>$year-01-01</premiered>\n";
+  print output "</tvshow>\n";
+  close(output);
+} else {
+  if ( not $quiet ) {
+    print "tvshow.nfo already exists - not overwriting\n";
+  }
+}
+
+my @files = <*>;
+foreach my $file (@files) {
+  if ( not $file =~ /\.(mkv|mp4|avi)$/ ) {
+    next;
+  }
+  if ( not $quiet ) { print $file . "\n"; }
+  $foundafile=-1;
+  my ($season, $episode, $title) = ($file =~ m/^(\d+)x(\d+) ?(.+)\.[^\.]+$/);
+  if ( $season eq "" or $episode eq "" ) {
+    print "Unidentified season or episode number for '$file'\n";
+    $unknownepisode=-1;
+    next;
+  }
+  my $prefix = $season."x".$episode." ".$title;
+  if ( $force or not -e "$prefix.nfo" ) {
+    if ( not $quiet ) { print "Season: $season ; Episode: $episode ; Title: \"$title\"\n"; }
+    open(output,'>',"$prefix.nfo");
+    print output "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>\n";
+    print output "<episodedetails>\n";
+    print output "  <title>$title</title>\n";
+    my ($trimmedseason, $trimmedepisode) = ($file =~ m/^0*(\d+)x0*(\d+)/);
+    print output "  <season>$trimmedseason</season>\n";
+    print output "  <episode>$trimmedepisode</episode>\n";
+    print output "  <plot><!-- Do NOT use indentation within plot. Line breaks are treated literally -->\n";
+    print output "$title - season $trimmedseason episode $trimmedepisode\n";
+    print output "  </plot>\n";
+    print output "  <uniqueid type=\"home\" default=\"true\">$nospacetitle$season$episode</uniqueid>\n";
+    print output "  <aired>$year-01-01</aired>\n";
+    print output "</episodedetails>\n";
+    close(output);
+  } else {
+    if ( not $quiet ) {
+      print "$prefix.nfo already exists - not overwriting\n";
+    }
+  }
+  if ( not $nothumbnail ) {
+    if ( $force or not -e "$prefix-thumb.jpg" ) {
+      if ( not $quiet ) { print "Extracting thumbnail to '$prefix-thumb.jpg'\n"; }
+      my $command="ffmpeg -hide_banner -loglevel error";
+      $command=$command." -y -ss $timestamp -i '$file' -frames:v 1 -q:v 7 '$prefix-thumb.jpg'";
+      system($command);
+    } else {
+      if ( not $quiet ) {
+        print "$prefix-thumb.jpg already exists - not overwriting\n";
+      }
+    }
+  }
+}
+if ( $unknownepisode and not $quiet ) {
+  print "There was at least one unidentified video file. Episodes should be named:\n";
+  print "'SSxEE Episodename.ext' e.g. '01x01 An Unearthly Child.mkv'\n";
+  print "Try --help for more information\n";
+}
+if ( not $foundafile and not $quiet ) {
+  print "No episode files found in this directory. You might have run this from\n";
+  print "the wrong folder. ";
+  if ( $tvshownfoalreadyexists ) {
+    print "Try --help\n";
+  } else {
+    print "Consider deleting tvshow.nfo and try --help\n";
+  }
+}
