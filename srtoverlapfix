@@ -1,0 +1,117 @@
+#!/usr/bin/env perl
+
+########################################################################
+# srtoverlapfix.pl by Andrew Oakley public domain 2025-09 aoakley.com
+########################################################################
+# This Perl script attempts to fix SRT files that have overlapping, or
+# rather identical, timestamps that cause subtitles to be rendered
+# bottom-to-top or last-to-first. For example, where:
+#   the first line
+#   the second line
+#   the third line
+# is actually rendered like this:
+#   the third line
+#   the first line
+#   the second line
+# This can happen with older BBC programmes archived using get_iplayer,
+# for example older episodes of QI, and lots of other media.
+# Technically speaking, this is an issue with the playback software and
+# not a bug with the subtitles (the handling of overlapping timestamps
+# is undefined in the SRT specification), but I can't "fix" VLC yet I
+# can "fix" SRT files. Don't agree? I see your point. Don't use this.
+#
+# Usage: srtoverlapfix INPUTFILE.SRT OUTPUTFILE.SRT
+#
+# Iterate through an entire directory full of .srt files:
+# mkdir -p out ; ls -1 *.srt | xargs -I {} srtoverlapfix "{}" "out/{}"
+#
+# CAUTION: DREADFUL CODING AHEAD. Wrote in a hurry late one night.
+# It works for me. It's non-destructive. It's public domain so feel free
+# to make it better.
+#
+# Only works for IDENTICAL timestamps, not merely overlapping ones.
+# There is NEAR-ZERO ERROR HANDLING.
+########################################################################
+
+$inputfile=$ARGV[0];
+$outputfile=$ARGV[1];
+
+if ( $inputfile eq "" || $outputfile eq "" || $inputfile =~ /(-h|--help)/ ) {
+  $0 =~ /([^\/]+)$/ ;
+  print "Usage: $1 INPUTFILE.srt OUTPUTFILE.srt\n";
+  exit;
+}
+if ( $inputfile eq $outputfile ) {
+  print "Input and output are the same file '$inputfile'\n";
+  print "and this script is not reliable enough to trust.\n";
+  print "(Plus, I can't be bothered to write to a temp file)\n";
+  print "Pick a different output filename.\n";
+  exit;
+}
+if ( -e $outputfile ) {
+  print "Output file '$outputfile' already exists\n";
+  print "and this script is not reliable enough to trust.\n";
+  print "It's up to you to delete the existing (old?) output file first,\n";
+  print "or pick another output filename.\n";
+  exit;
+}
+
+$buff="";
+$a="";
+$b="";
+$lastline="";
+$outblocknum=0;
+$inblocknum=0;
+open INPUTHANDLE, '<', $inputfile or die qq(Can't open "$inputfile" for reading\n$!);
+open OUTPUTHANDLE, '>', $outputfile or die qq(Can't open "$outputfile" for writing\n$!);
+while ( <INPUTHANDLE> ) {
+  if ( $lastline =~ "" && /^\d+$/ ) {
+    # A number preceded by a blank line usually indicates a new block
+    $lastline=$_;
+    next;
+  }
+  if ( /^(\d\d:\d\d:\d\d)([.,]\d+) --> (\d\d:\d\d:\d\d)([.,]\d+)/ ) {
+    # We found a timestamp
+    $inblocknum++;
+    $aa="$1$2";
+    $bb="$3$4";
+    if ( $aa eq $a && $bb eq $b ) {
+      # This timestamp is the same as the previous block
+      # Do nothing so we merge the two blocks together
+      # Ye GODS this is dreadful logic
+    } else {
+      # We have a new block with a different timestamp
+      if ( $outblocknum>0 ) {
+        print OUTPUTHANDLE "$outblocknum\n$a --> $b\n$buff\n";
+      }
+      $outblocknum++;
+      $buff="";
+      $a=$aa;
+      $b=$bb;
+    }
+  } else {
+    if ( /^$/ ) {
+      # Don't add empty lines to the buffer, and don't increase block number
+      next;
+    } else {
+      # Not an empty line, so add it to the buffer
+      $buff="$buff$_";
+    }
+  }
+  $lastline=$_;
+}
+# Dump last buffer
+if ( $outblocknum eq 0 ) {
+  print "Input file '$inputfile' doesn't look like an SRT file.\nOutput file '$outputfile' is probably blank or junk.\n";
+} else {
+  $outblocknum++;
+  print OUTPUTHANDLE "$outblocknum\n$a --> $b\n$buff\n";
+  # Let's just hope no file ever has more than 99999 blocks
+  # Did I mention I bought a lovely new car with Y2K overtime?
+  # I was interviewed for the "Headlong Surviving Y2K" podcast, dontchaknow
+  printf "Input  %5s blocks from '$inputfile'\n",$inblocknum;
+  printf "Output %5s blocks to   '$outputfile'\n",$outblocknum;
+}
+
+close (OUTPUTHANDLE);
+close (INPUTHANDLE);
