@@ -5,6 +5,38 @@ These scripts are not suitable for production use, they are not widely used nor 
 
 However you might find them useful, either as-is, or as the basis or inspiration for your own customisations or re-writes.
 
+
+# srtoverlapfix
+srtoverlapfix INPUTFILE.srt OUTPUTFILE.srt
+
+Iterate through an entire directory full of .srt files:                                                               # mkdir -p out ; ls -1 *.srt | xargs -I {} srtoverlapfix "{}" "out/{}"
+
+This Perl script attempts to fix SRT files that have overlapping, or
+rather identical, timestamps that cause subtitles to be rendered
+bottom-to-top or last-to-first.
+
+For example, where:
+<br/>&nbsp;&nbsp;the first line
+<br/>&nbsp;&nbsp;the second line
+<br/>&nbsp;&nbsp;the third line
+
+is actually rendered like this:
+<br/>&nbsp;&nbsp;the third line
+<br/>&nbsp;&nbsp;the first line
+<br/>&nbsp;&nbsp;the second line
+
+This can happen with older BBC programmes archived using get_iplayer,
+for example older episodes of QI, and lots of other media.
+Technically speaking, this is an issue with the playback software and
+not a bug with the subtitles (the handling of overlapping timestamps
+is undefined in the SRT specification), but I can't "fix" VLC yet I
+can "fix" SRT files. Don't agree? I see your point. Don't use this.
+
+There is NEAR-ZERO ERROR HANDLING.
+
+Only works for IDENTICAL timestamps, not merely overlapping ones.
+
+
 # tvshow-filename-to-nfo
 tvshow-filename-to-nfo [ OPTIONS ] [ directory ] [ timestamp ]
 
@@ -42,3 +74,4 @@ Options:
 <br/>-q --quiet      Do not produce progress information
 <br/>-f --force      Overwrite existing .nfo and thumnail files
 <br/>                (default is not to overwrite)
+
