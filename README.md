@@ -9,7 +9,8 @@ However you might find them useful, either as-is, or as the basis or inspiration
 # srtoverlapfix
 srtoverlapfix INPUTFILE.srt OUTPUTFILE.srt
 
-Iterate through an entire directory full of .srt files:                                                               # mkdir -p out ; ls -1 *.srt | xargs -I {} srtoverlapfix "{}" "out/{}"
+Iterate through an entire directory full of .srt files:
+<br/>mkdir -p out ; ls -1 *.srt | xargs -I {} srtoverlapfix "{}" "out/{}"
 
 This Perl script attempts to fix SRT files that have overlapping, or
 rather identical, timestamps that cause subtitles to be rendered
